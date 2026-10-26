@@ -1,0 +1,31 @@
+services:
+  flask_app:
+    build:
+      context: .
+    ports:
+      - "5001:5000" # Change 5000 on the host to 5001
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - RATELIMIT_STORAGE_URI=${RATELIMIT_STORAGE_URI:-memory://}
+      - RATELIMIT_DEFAULTS=${RATELIMIT_DEFAULTS:-5000 per day,500 per hour}
+      - SESSION_COOKIE_SECURE=true
+      - PASSKEY_ORIGINS=${PASSKEY_ORIGINS:-}
+      - PASSKEY_DB_PATH=/app/data/passkeys.db
+      - ACCOUNT_ID=${ACCOUNT_ID}
+      - CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - PLACEHOLDER_EMAIL_DOMAIN=${PLACEHOLDER_EMAIL_DOMAIN}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - MY_USER=${MY_USER}
+      - EMAIL_LIST=${EMAIL_LIST}
+    volumes:
+      - passkey_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/login')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  passkey_data:

@@ -1,0 +1,1 @@
+"""EmailApp application package."""

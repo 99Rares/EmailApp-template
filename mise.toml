@@ -1,0 +1,19 @@
+[tools]
+python = "3.12"
+
+[env]
+_.file = ".env"
+SESSION_COOKIE_SECURE = "false"
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.install]
+description = "Install runtime and development dependencies"
+run = "python -m pip install -r requirements.txt -r requirements-dev.txt"
+
+[tasks.check]
+description = "Compile the application and run the test suite"
+run = "python -m compileall -q app.py email_app && python -m pytest -q"
+
+[tasks.dev]
+description = "Run the Flask development server with automatic reload"
+run = "python -m flask --app app run --debug"

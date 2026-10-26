@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark" data-ui-style="liquid">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Cloudflare Email Routing Rules</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="/static/mail-routing.svg?v=1">
+    <link rel="alternate icon" type="image/x-icon" href="/static/favicon.ico?v=mail1">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/mail-routing-touch-v1.png">
+    <meta name="apple-mobile-web-app-title" content="Email Routing">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='snow.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='easter.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='particle-interactions.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='season-controls.js') }}" defer></script>
+</head>
+
+<body>
+    <main class="workspace">
+        <header class="page-header">
+            <a class="brand" href="{{ url_for('index') }}"><i class="bi bi-envelope-at" aria-hidden="true"></i> Email Routing</a>
+            <div class="toolbar">
+                <div class="dropdown">
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle appearance-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-droplet-fill" aria-hidden="true"></i>
+                        <span class="style-label">Standard glass</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><button type="button" class="dropdown-item" data-ui-style-option="liquid">Standard liquid glass</button></li>
+                        <li><button type="button" class="dropdown-item" data-ui-style-option="extreme">Vivid glass</button></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><button type="button" class="dropdown-item" data-ui-style-option="default">Solid appearance</button></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-outline-secondary theme-toggle" aria-label="Switch to light mode">
+                    <i class="bi bi-sun-fill" aria-hidden="true"></i>
+                    <span class="theme-label">Light mode</span>
+                </button>
+                <div class="dropdown">
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-stars" aria-hidden="true"></i>
+                        Season: <span class="season-label">Automatic</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><button type="button" class="dropdown-item" data-season="auto">Automatic</button></li>
+                        <li><button type="button" class="dropdown-item" data-season="christmas">Christmas</button></li>
+                        <li><button type="button" class="dropdown-item" data-season="easter">Easter</button></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><button type="button" class="dropdown-item" data-season="off">Off</button></li>
+                    </ul>
+                </div>
+            {% if passkeys_enabled %}
+            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#passkeyModal">
+                <i class="bi bi-fingerprint" aria-hidden="true"></i> Passkeys
+            </button>
+            {% endif %}
+            <!-- Logout Button -->
+            <form action="{{ url_for('logout') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </button>
+            </form>
+            </div>
+        </header>
+
+        <section class="page-intro"><p class="eyebrow">YOUR EMAIL, ORGANIZED</p><h1>A place for every alias.</h1><p>Manage the addresses that connect your services to your inbox.</p></section>
+
+        <!-- Loading Spinner -->
+        <div id="loadingOverlay" class="overlay" aria-hidden="true" aria-live="polite">
+            <div id="loadingSpinner" class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show"
+            role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="routing-layout">
+        <section class="rules-panel" aria-labelledby="rules-title">
+        <div class="section-heading"><div><p class="eyebrow">ROUTING</p><h2 id="rules-title">Your aliases <span class="count" id="ruleCount" data-total="{{ email_addresses | length }}">{{ email_addresses | length }}</span></h2></div></div>
+        <!-- Dynamic Filter for Destination Email -->
+        <form method="GET" action="{{ url_for('index') }}" class="filter-bar">
+            <label for="destinationFilter" class="form-label">Destination</label>
+            <select id="destinationFilter" name="destination" class="form-select">
+                <option value="non_drop" {% if selected_destination == 'non_drop' %}selected{% endif %}>All forwarding addresses</option>
+                {% for email in destination_emails %}
+                <option value="{{ email }}" {% if selected_destination == email %}selected{% endif %}>{{ email }}</option>
+                {% endfor %}
+                <option value="Drop" {% if selected_destination == 'Drop' %}selected{% endif %}>Drop</option>
+            </select>
+            <button type="submit" class="btn btn-outline-primary">Apply filter</button>
+        </form>
+
+        {% if email_addresses %}
+        <div class="search-bar">
+            <label for="ruleSearch" class="form-label visually-hidden">Search aliases</label>
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" id="ruleSearch" class="form-control" placeholder="Search name, alias or destination" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        {% endif %}
+
+        <!-- Display Parsed Email Routing Rules in a Table -->
+        {% if email_addresses %}
+        <div class="easter-table-scene">
+        <div class="table-responsive">
+            <table class="table align-middle" id="emailTable">
+                <thead >
+                    <tr>
+                        <th scope="col">Creation Time</th>
+                        <th scope="col">Service Name</th>
+                        <th scope="col">Generated Email</th>
+                        <th scope="col">Destination Email</th>
+                        <th scope="col">Manage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in email_addresses %}
+                    <tr data-generated-email="{{ rule.generated_email }}"
+                        data-destination-email="{{ rule.destination_email }}" data-service-name="{{ rule.name }}"
+                        data-action-type="{{ 'drop' if rule.destination_email == 'Drop' else 'forward' }}">
+                        <td data-label="Creation Time" class="creation-time">{{ rule.creation_time }}</td>
+                        <td data-label="Name" class="service-name">{{ rule.name }}</td>
+                        <td data-label="Generated Email" class="copy-email">
+                            <div class="copy-email-wrap"><span class="copy-email-text">{{ rule.generated_email }}</span>
+                            <button type="button" class="copy-email-btn" aria-label="Copy {{ rule.generated_email }}"><i class="bi bi-copy" aria-hidden="true"></i></button></div>
+                        </td>
+                        <td data-label="Destination Email" class="destination-email">{{ rule.destination_email }}</td>
+                        <td data-label="Actions" class="rule-actions">
+                            <button type="button" class="btn btn-outline-secondary btn-sm edit-rule" aria-label="Edit rule for {{ rule.name or rule.generated_email }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button>
+                            <form action="{{ url_for('drop_rule', rule_id=rule.id) }}" method="POST" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-warning btn-sm">
+                                    <i class="bi bi-envelope-x"></i> Drop Email
+                                </button>
+                            </form>
+                            <form action="{{ url_for('delete_rule', rule_id=rule.id) }}" method="POST" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-danger btn-sm">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+            </table>
+            <p id="searchEmpty" class="search-empty d-none" role="status">No aliases match your search.</p>
+        </div>
+        </div>
+        {% else %}
+        <div class="alert alert-info text-center" role="alert">
+            No email routing rules found.
+        </div>
+        {% endif %}
+
+        </section>
+        <!-- Form to Add a New Email Routing Rule -->
+        <section class="editor-panel" aria-labelledby="editor-title">
+            <p class="eyebrow">MAKE A CONNECTION</p><h2 id="editor-title">Add a routing rule</h2>
+            <p class="editor-description">A dedicated address for your next service.</p>
+            <form id="ruleForm" action="{{ url_for('add_rule') }}" method="POST" class="needs-validation" novalidate
+>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="generated_email" class="form-label">Alias text</label>
+                    <input type="text" id="generated_email" name="generated_email"
+                        class="form-control" placeholder="Leave blank to generate">
+                    <div class="invalid-feedback">
+                        This field is required when 'Drop' is selected.
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="mb-3">
+                        <label for="app_name" class="form-label">Service name</label>
+                        <input type="text" id="app_name" name="app_name" class="form-control"
+                            placeholder="Enter the service or app name">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="destination_email" class="form-label">Forward to</label>
+                    <select id="destination_email" name="destination_email" class="form-select"
+                        required>
+                        <option value="" disabled selected>Select an email</option>
+                        {% for email in destination_emails %}
+                        <option value="{{ email }}">{{ email }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="invalid-feedback">
+                        Please select an email.
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="action_type" class="form-label">Delivery action</label>
+                    <select id="action_type" name="action_type" class="form-select" required>
+                        <option value="forward">Forward</option>
+                        <option value="drop">Drop</option>
+                    </select>
+                    <div class="invalid-feedback">
+                        Please select an action type.
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100" id="saveRule">Add rule <i class="bi bi-arrow-up-right" aria-hidden="true"></i></button>
+                <button type="button" class="btn btn-outline-secondary w-100 mt-2 d-none" id="cancelEdit">Cancel edit</button>
+            </form>
+        </section>
+        </div>
+        <footer class="workspace-footer">Email Routing <span>Powered by Cloudflare</span></footer>
+        </main>
+
+        <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+
+        <!-- Link to Bootstrap JS -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+            crossorigin="anonymous"></script>
+    <script src="{{ url_for('static', filename='alerts.js') }}"></script>
+    {% if passkeys_enabled %}
+    <div class="modal fade" id="passkeyModal" tabindex="-1" aria-labelledby="passkeyModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="passkeyModalLabel">Passkeys</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <ul id="passkeyList" class="list-group mb-3"></ul>
+                    <button type="button" id="passkeyAdd" class="btn btn-primary">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i> Add a passkey
+                    </button>
+                    <div id="passkeyStatus" class="small mt-2" role="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='passkeys.js') }}" defer></script>
+    {% endif %}
+</body>
+
+</html>
